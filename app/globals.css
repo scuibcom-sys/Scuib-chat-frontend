@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+@theme {
+  --font-urbanist: var(--font-urbanist), ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-logo: 0px 16px 32px 0px #4b342540;
+
+  /* breakpoints */
+  --breakpoint-xs: 350px;
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 976px;
+  --breakpoint-mlg: 1100px;
+  --breakpoint-xl: 1440px;
+}
+
+body {
+  font-family: var(--font-urbanist);
+}
+
+/*
+ * Chat surface theme tokens.
+ *
+ * The conversation UI reads its colours from these variables instead of
+ * hard-coded hex values so the same markup works in light and dark mode.
+ * Dark mode is opt-in through `data-theme="dark"` on a parent element and
+ * also follows the OS preference when no explicit theme has been set.
+ */
+:root {
+  --chat-own-bg: #2b6bed;
+  --chat-own-text: #ffffff;
+  --chat-own-meta: rgba(255, 255, 255, 0.72);
+  --chat-own-link: #eaf2ff;
+  --chat-own-border: transparent;
+
+  --chat-incoming-bg: #ffffff;
+  --chat-incoming-text: #1f2733;
+  --chat-incoming-meta: #8a95a5;
+  --chat-incoming-link: #2b6bed;
+  --chat-incoming-border: #e7ebf1;
+
+  --chat-divider-line: #dce1e8;
+  --chat-divider-text: #8a95a5;
+
+  --chat-highlight-bg: #fff6da;
+  --chat-highlight-ring: rgba(43, 107, 237, 0.28);
+
+  --chat-receipt: rgba(255, 255, 255, 0.85);
+  --chat-receipt-read: #bcd9ff;
+
+  --chat-attachment-bg: #f3f5f8;
+  --chat-attachment-border: #e2e7ee;
+  --chat-attachment-title: #1f2733;
+  --chat-attachment-sub: #7a8595;
+}
+
+[data-theme="dark"] {
+  --chat-own-bg: #2563d8;
+  --chat-own-text: #f4f8ff;
+  --chat-own-meta: rgba(244, 248, 255, 0.66);
+  --chat-own-link: #cfe2ff;
+  --chat-own-border: transparent;
+
+  --chat-incoming-bg: #1e242c;
+  --chat-incoming-text: #e7ecf2;
+  --chat-incoming-meta: #8a95a5;
+  --chat-incoming-link: #6fa8ff;
+  --chat-incoming-border: #2a323c;
+
+  --chat-divider-line: #2a323c;
+  --chat-divider-text: #7a8595;
+
+  --chat-highlight-bg: #2a2e22;
+  --chat-highlight-ring: rgba(111, 168, 255, 0.32);
+
+  --chat-receipt: rgba(244, 248, 255, 0.7);
+  --chat-receipt-read: #6fa8ff;
+
+  --chat-attachment-bg: #262d36;
+  --chat-attachment-border: #313a45;
+  --chat-attachment-title: #e7ecf2;
+  --chat-attachment-sub: #8a95a5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --chat-own-bg: #2563d8;
+    --chat-own-text: #f4f8ff;
+    --chat-own-meta: rgba(244, 248, 255, 0.66);
+    --chat-own-link: #cfe2ff;
+    --chat-own-border: transparent;
+
+    --chat-incoming-bg: #1e242c;
+    --chat-incoming-text: #e7ecf2;
+    --chat-incoming-meta: #8a95a5;
+    --chat-incoming-link: #6fa8ff;
+    --chat-incoming-border: #2a323c;
+
+    --chat-divider-line: #2a323c;
+    --chat-divider-text: #7a8595;
+
+    --chat-highlight-bg: #2a2e22;
+    --chat-highlight-ring: rgba(111, 168, 255, 0.32);
+
+    --chat-receipt: rgba(244, 248, 255, 0.7);
+    --chat-receipt-read: #6fa8ff;
+
+    --chat-attachment-bg: #262d36;
+    --chat-attachment-border: #313a45;
+    --chat-attachment-title: #e7ecf2;
+    --chat-attachment-sub: #8a95a5;
+  }
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+  transition:
+    opacity 180ms ease,
+    filter 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+@media (hover: hover) {
+  button:not(:disabled):hover {
+    filter: brightness(0.98);
+  }
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
