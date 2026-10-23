@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Scuib Chat Frontend
 
 Scuib Chat is a Next.js 16 frontend for a community platform focused on tech cliques, onboarding, profile setup, chat, and community administration.
@@ -190,3 +191,7 @@ Before deploying:
 - This project is on Next.js 16, so check the bundled framework docs in `node_modules/next/dist/docs/` before making framework-level changes.
 - Prefer `rg` for codebase searches and keep client-side auth and onboarding logic consistent with the Zustand stores.
 - Avoid introducing route behavior that shows onboarding or welcome screens on passive session restoration unless that behavior is intentional.
+=======
+# Scuib-chat-frontend
+World first status platform. Let the world feel you daily
+>>>>>>> c5d388ed7a0ad9de5772428552c834edfd0afd8e
