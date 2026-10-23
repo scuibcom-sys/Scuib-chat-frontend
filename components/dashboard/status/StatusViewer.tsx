@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, MessageCircle, Trash2, X } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
-import { ApiError, type AuthTokens } from "@/utils/scuibApi";
+import { ApiError, DEFAULT_GROUP_ACCENT_CHOICES, type AuthTokens } from "@/utils/scuibApi";
 import {
   deleteStatus,
   fetchStatusViewers,
@@ -334,7 +334,7 @@ function StatusContentView({
     return (
       <div
         className="flex h-full w-full items-center justify-center px-8 text-center"
-        style={{ backgroundColor: status.backgroundColor ?? "#3aa757" }}
+        style={{ backgroundColor: status.backgroundColor ?? DEFAULT_GROUP_ACCENT_CHOICES[0] }}
       >
         <p className="text-2xl font-semibold leading-relaxed text-white">{status.textContent}</p>
       </div>

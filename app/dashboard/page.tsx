@@ -39,6 +39,7 @@ function isDashboardPreset(
     value === "confirm-join" ||
     value === "public-members" ||
     value === "dm" ||
-    value === "dm-member-card"
+    value === "dm-member-card" ||
+    value === "status"
   );
 }

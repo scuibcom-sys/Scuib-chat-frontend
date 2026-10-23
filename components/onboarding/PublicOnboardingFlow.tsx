@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { WelcomeLanding } from "./WelcomeLanding";
+import { StatusLandingPage } from "./StatusLandingPage";
 
 function subscribeToHydration() {
   return () => {};
@@ -15,8 +15,8 @@ export function PublicOnboardingFlow() {
   );
 
   if (!hasHydrated) {
-    return <div className="min-h-screen bg-[#FCF8F1]" />;
+    return <div className="min-h-screen bg-[#FAF6F1]" />;
   }
 
-  return <WelcomeLanding />;
+  return <StatusLandingPage />;
 }

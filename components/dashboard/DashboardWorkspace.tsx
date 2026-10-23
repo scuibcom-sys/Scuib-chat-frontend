@@ -22,6 +22,7 @@ import {
   LogOut,
   MessageCircleMore,
   Pencil,
+  Play,
   Plus,
   Reply,
   Search,
@@ -37,6 +38,7 @@ import { Modal } from "@/components/ui/Modal";
 import { StatusStrip, type StatusStripEntry } from "@/components/dashboard/status/StatusStrip";
 import { StatusViewer } from "@/components/dashboard/status/StatusViewer";
 import { StatusComposer } from "@/components/dashboard/status/StatusComposer";
+import { StatusDashboardView } from "@/components/dashboard/status/StatusDashboardView";
 import { groupStatusesByAuthor, type ApiStatusRecord } from "@/utils/scuibStatusApi";
 import {
   fetchGroupMembers,
@@ -1774,10 +1776,22 @@ export function DashboardWorkspace({
     setStatusFeedRefreshKey((key) => key + 1);
   }, []);
 
-  const lastPostedStatusRef = useRef<ApiStatusRecord | null>(null);
+  const [unreadStatusCount, setUnreadStatusCount] = useState(0);
+
+  const handleStatusNavigation = useCallback(() => {
+    setActiveSection("status");
+    setOverlay(null);
+  }, []);
+
+  // Maps status id → backgroundColor for every status posted in this session,
+  // so that any server re-fetch that omits background_color can be patched
+  // for ALL posts, not just the most recently posted one.
+  const postedBackgroundColorsRef = useRef<Map<string, string>>(new Map());
 
   const handleStatusPosted = useCallback((posted: ApiStatusRecord) => {
-    lastPostedStatusRef.current = posted;
+    if (posted.backgroundColor) {
+      postedBackgroundColorsRef.current.set(posted.id, posted.backgroundColor);
+    }
     // Inject immediately into the snapshot so the viewer shows the right
     // backgroundColor without waiting for the server re-fetch.
     setStatusFeedSnapshot((prev) => {
@@ -1787,14 +1801,16 @@ export function DashboardWorkspace({
     setStatusFeedRefreshKey((key) => key + 1);
   }, []);
 
-  // When the server re-sends the feed, patch any entry whose backgroundColor
-  // is null with the locally-known value we recorded at post time.
+  // When the server re-sends the feed, patch every entry whose backgroundColor
+  // is null with the locally-known value recorded at post time.
   const handleStatusFeedLoaded = useCallback((feed: ApiStatusRecord[]) => {
-    const last = lastPostedStatusRef.current;
-    if (last?.backgroundColor) {
-      const patched = feed.map((s) =>
-        s.id === last.id ? { ...s, backgroundColor: last.backgroundColor } : s,
-      );
+    const colorMap = postedBackgroundColorsRef.current;
+    if (colorMap.size > 0) {
+      const patched = feed.map((s) => {
+        if (s.backgroundColor) return s;
+        const known = colorMap.get(s.id);
+        return known ? { ...s, backgroundColor: known } : s;
+      });
       setStatusFeedSnapshot(patched);
     } else {
       setStatusFeedSnapshot(feed);
@@ -1825,6 +1841,7 @@ export function DashboardWorkspace({
     () => {
       const screenParam = searchParams.get("screen");
       if (screenParam === "messages") return "messages";
+      if (screenParam === "status" || initialPreset === "status") return "status";
       return (
         cachedDashboardState?.activeSection ??
         (usesMessagesNavigation(initialPreset) ? "messages" : "groups")
@@ -2809,7 +2826,8 @@ export function DashboardWorkspace({
       isAuthenticated ||
       normalizedSharedGroupParam ||
       initialPreset === "guest" ||
-      initialPreset === "messages-guest"
+      initialPreset === "messages-guest" ||
+      initialPreset === "status"
     ) {
       return;
     }
@@ -5447,7 +5465,10 @@ export function DashboardWorkspace({
         onBack={handleMobileBack}
         onGroupsNav={handleGroupsNavigation}
         onMessagesNav={handleMessagesNavigation}
+        onStatusNav={handleStatusNavigation}
         onProfileNav={handleProfileNavigation}
+        unreadStatusCount={unreadStatusCount}
+        onUnreadStatusCountChange={setUnreadStatusCount}
         onGroupSearchToggle={handleMobileGroupSearchToggle}
         onGroupSearchOpen={handleOpenMobileGroupSearch}
         onGroupSearchQueryChange={setGroupSearchQuery}
@@ -5479,12 +5500,26 @@ export function DashboardWorkspace({
             activeSection={overlay === "coming-soon" ? "profile" : activeSection}
             unreadGroupsCount={unreadGroupsCount}
             unreadMessagesCount={unreadMessagesCount}
+            unreadStatusCount={unreadStatusCount}
+            onStatusClick={handleStatusNavigation}
             onGroupsClick={handleGroupsNavigation}
             onMessagesClick={handleMessagesNavigation}
             onProfileClick={handleProfileNavigation}
           />
 
-          <div className="flex min-h-0 w-[290px] flex-col border-r border-[#E9DBD3] bg-[#FCF8F6] xl:w-[330px]">
+          {activeSection === "status" ? (
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+              <StatusDashboardView
+                mode="desktop"
+                onSwitchToMessages={handleMessagesNavigation}
+                onComposeStatus={() => setIsStatusComposerOpen(true)}
+                refreshKey={statusFeedRefreshKey}
+                onUnreadCountChange={setUnreadStatusCount}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="flex min-h-0 w-[290px] flex-col border-r border-[#E9DBD3] bg-[#FCF8F6] xl:w-[330px]">
             <DashboardListHeader
               icon={
                 activeSection === "groups" ? (
@@ -5783,8 +5818,10 @@ export function DashboardWorkspace({
               />
             )}
           </div>
-        </div>
-      </div>
+        </>
+      )}
+    </div>
+  </div>
 
       {/* File upload modal */}
       <ChatUploadModal
@@ -6120,7 +6157,10 @@ function MobileDashboardWorkspace({
   onBack,
   onGroupsNav,
   onMessagesNav,
+  onStatusNav,
   onProfileNav,
+  unreadStatusCount = 0,
+  onUnreadStatusCountChange,
   onGroupSearchToggle,
   onGroupSearchOpen,
   onGroupSearchQueryChange,
@@ -6202,7 +6242,10 @@ function MobileDashboardWorkspace({
   onBack: () => void;
   onGroupsNav: () => void;
   onMessagesNav: () => void;
+  onStatusNav: () => void;
   onProfileNav: () => void;
+  unreadStatusCount?: number;
+  onUnreadStatusCountChange?: (count: number) => void;
   onGroupSearchToggle: () => void;
   onGroupSearchOpen: () => void;
   onGroupSearchQueryChange: (value: string) => void;
@@ -6294,6 +6337,16 @@ function MobileDashboardWorkspace({
               onCancelEditingMessage={onCancelEditingMessage}
             />
           </>
+        ) : activeSection === "status" ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(100px+env(safe-area-inset-bottom))]">
+            <StatusDashboardView
+              mode="mobile"
+              onSwitchToMessages={onMessagesNav}
+              onComposeStatus={onComposeStatus}
+              refreshKey={statusFeedRefreshKey}
+              onUnreadCountChange={onUnreadStatusCountChange}
+            />
+          </div>
         ) : activeSection === "messages" ? (
           messagesScreen === "restricted" || showMessagesGuestState ? (
             <>
@@ -6577,6 +6630,8 @@ function MobileDashboardWorkspace({
 
         <MobileBottomNavigation
           activeSection={visibleNavSection}
+          unreadStatusCount={unreadStatusCount}
+          onStatusClick={onStatusNav}
           onGroupsClick={onGroupsNav}
           onMessagesClick={onMessagesNav}
           onProfileClick={onProfileNav}
@@ -7972,10 +8027,20 @@ function DashboardNavIcon({
   active,
   size,
 }: {
-  section: "groups" | "messages";
+  section: "groups" | "messages" | "status";
   active: boolean;
   size: number;
 }) {
+  if (section === "status") {
+    return (
+      <Play
+        size={size}
+        className="translate-x-0.5 fill-current"
+        aria-hidden="true"
+      />
+    );
+  }
+
   const src =
     section === "groups"
       ? active
@@ -7999,11 +8064,15 @@ function DashboardNavIcon({
 
 function MobileBottomNavigation({
   activeSection,
+  unreadStatusCount = 0,
+  onStatusClick,
   onGroupsClick,
   onMessagesClick,
   onProfileClick,
 }: {
   activeSection: DashboardSection | "profile";
+  unreadStatusCount?: number;
+  onStatusClick: () => void;
   onGroupsClick: () => void;
   onMessagesClick: () => void;
   onProfileClick: () => void;
@@ -8025,6 +8094,11 @@ function MobileBottomNavigation({
       onClick: onMessagesClick,
     },
     {
+      key: "status",
+      label: "STATUS",
+      onClick: onStatusClick,
+    },
+    {
       key: "profile",
       label: "PROFILE",
       icon: <UserRound className="h-7 w-7 sm:h-8 sm:w-8" strokeWidth={1.8} />,
@@ -8034,8 +8108,8 @@ function MobileBottomNavigation({
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center">
-      <div className="w-full bg-[#5C3A26] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pt-5">
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="w-full bg-[#5C3A26] px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pt-5">
+        <div className="grid grid-cols-4 gap-1 sm:gap-3">
           {items.map((item) => {
             const isActive = activeSection === item.key;
 
@@ -8044,34 +8118,44 @@ function MobileBottomNavigation({
                 key={item.key}
                 type="button"
                 onClick={item.onClick}
-                className="flex flex-col items-center gap-2 sm:gap-3"
+                className="flex flex-col items-center gap-1.5 sm:gap-3"
               >
                 <span
-                  className={`flex h-[56px] w-[56px] items-center justify-center rounded-full sm:h-[68px] sm:w-[68px] ${
+                  className={`relative flex h-[52px] w-[52px] items-center justify-center rounded-full sm:h-[64px] sm:w-[64px] ${
                     isActive ? "bg-[#A8704C] text-white" : "text-[#D8BCAC]"
                   }`}
                 >
+                  {item.key === "status" && unreadStatusCount > 0 ? (
+                    <span className="absolute -right-1 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F6871C] px-1 text-[11px] font-extrabold text-white shadow-sm">
+                      {unreadStatusCount}
+                    </span>
+                  ) : null}
                   {item.key === "groups" ? (
                     <DashboardNavIcon
                       section="groups"
                       active={isActive}
-                      size={24}
+                      size={22}
                     />
                   ) : item.key === "messages" ? (
                     <DashboardNavIcon
                       section="messages"
                       active={isActive}
-                      size={24}
+                      size={22}
+                    />
+                  ) : item.key === "status" ? (
+                    <Play
+                      size={22}
+                      className="translate-x-0.5 fill-current"
                     />
                   ) : (
                     <UserRound
-                      className="h-7 w-7 sm:h-8 sm:w-8"
+                      className="h-6 w-6 sm:h-7 sm:w-7"
                       strokeWidth={1.8}
                     />
                   )}
                 </span>
                 <span
-                  className={`text-[11px] font-extrabold tracking-[0.12em] sm:text-[12px] sm:tracking-[0.14em] ${
+                  className={`text-[10px] font-extrabold tracking-[0.1em] sm:text-[12px] sm:tracking-[0.14em] ${
                     isActive ? "text-white" : "text-[#D8BCAC]"
                   }`}
                 >
@@ -8164,6 +8248,8 @@ function DashboardRail({
   activeSection,
   unreadGroupsCount,
   unreadMessagesCount,
+  unreadStatusCount = 0,
+  onStatusClick,
   onGroupsClick,
   onMessagesClick,
   onProfileClick,
@@ -8171,6 +8257,8 @@ function DashboardRail({
   activeSection: DashboardSection | "profile";
   unreadGroupsCount: number;
   unreadMessagesCount: number;
+  unreadStatusCount?: number;
+  onStatusClick: () => void;
   onGroupsClick: () => void;
   onMessagesClick: () => void;
   onProfileClick: () => void;
@@ -8182,7 +8270,13 @@ function DashboardRail({
           <LogoIcon className="h-9 w-9 xl:h-10 xl:w-10" />
         </div>
 
-        <div className="flex w-full flex-col items-center gap-6 pt-10 xl:gap-8 xl:pt-14">
+        <div className="flex w-full flex-col items-center gap-5 pt-6 xl:gap-7 xl:pt-10">
+          <RailButton
+            icon={<Play className="h-6 w-6 translate-x-0.5 fill-current xl:h-7 xl:w-7" />}
+            active={activeSection === "status"}
+            badge={unreadStatusCount > 0 ? unreadStatusCount : undefined}
+            onClick={onStatusClick}
+          />
           <RailButton
             icon={<DashboardNavIcon section="groups" active={activeSection === "groups"} size={28} />}
             active={activeSection === "groups"}

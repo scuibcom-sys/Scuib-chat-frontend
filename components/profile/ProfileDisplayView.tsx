@@ -96,18 +96,18 @@ export function ProfileDisplayView() {
   }, [hasHydratedAuthStore, isAuthenticated, router]);
 
   useEffect(() => {
+    if (!hasHydratedAuthStore || !accessToken) return;
+
     let isActive = true;
 
     const loadGroups = async () => {
       try {
         const liveGroups = await fetchGroups(
-          accessToken
-            ? {
-                accessToken,
-                refreshToken,
-                tokenType,
-              }
-            : null,
+          {
+            accessToken,
+            refreshToken,
+            tokenType,
+          },
           (tokens) => {
             setTokens(tokens.accessToken, tokens.refreshToken, tokens.tokenType);
           },
@@ -127,7 +127,7 @@ export function ProfileDisplayView() {
     return () => {
       isActive = false;
     };
-  }, [accessToken, refreshToken, setTokens, tokenType]);
+  }, [hasHydratedAuthStore, accessToken, refreshToken, setTokens, tokenType]);
 
   useEffect(() => {
     if (!accessToken) return;

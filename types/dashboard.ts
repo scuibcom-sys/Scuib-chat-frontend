@@ -10,9 +10,10 @@ export type DashboardPreset =
   | "confirm-join"
   | "public-members"
   | "dm"
-  | "dm-member-card";
+  | "dm-member-card"
+  | "status";
 
-export type DashboardSection = "groups" | "messages";
+export type DashboardSection = "groups" | "messages" | "status";
 
 export type GroupPanelMode =
   | "chat"

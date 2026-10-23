@@ -2,14 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PublicOnboardingFlow } from "./PublicOnboardingFlow";
 import { useAuthStore } from "@/store/authStore";
-import { WelcomeLanding } from "./WelcomeLanding";
+import { StatusLandingPage } from "./StatusLandingPage";
 
 export function HomeEntry() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const hasSignedInBefore = useAuthStore((state) => state.hasSignedInBefore);
   const [hasHydrated, setHasHydrated] = useState(
     () => useAuthStore.persist?.hasHydrated() ?? false,
   );
@@ -31,12 +29,8 @@ export function HomeEntry() {
   }, [hasHydrated, isAuthenticated, router]);
 
   if (!hasHydrated || isAuthenticated) {
-    return <div className="min-h-screen bg-[#FCF8F1]" />;
+    return <div className="min-h-screen bg-[#FAF6F1]" />;
   }
 
-  if (hasSignedInBefore) {
-    return <WelcomeLanding />;
-  }
-
-  return <PublicOnboardingFlow />;
+  return <StatusLandingPage />;
 }
