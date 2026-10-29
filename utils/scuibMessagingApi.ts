@@ -2077,7 +2077,7 @@ export async function fetchUserPresence(
 export function getRealtimePresenceWebSocketUrl(userId?: string) {
   const apiBaseUrl = (
     process.env.NEXT_PUBLIC_API_BASE_URL ??
-    "https://scuib-chat-rrx6.onrender.com"
+    "https://scuib-chat-04do.onrender.com"
   ).replace(/\/+$/, "");
   const socketBaseUrl = apiBaseUrl.replace(/^http/i, "ws");
 

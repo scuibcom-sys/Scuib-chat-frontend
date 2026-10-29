@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Scuib Chat Frontend
 
 Scuib Chat is a Next.js 16 frontend for a community platform focused on tech cliques, onboarding, profile setup, chat, and community administration.
@@ -55,14 +54,14 @@ http://localhost:3000
 The project reads the following client-safe environment variables:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=https://scuib-chat-rrx6.onrender.com
+NEXT_PUBLIC_API_BASE_URL=https://scuib-chat-04do.onrender.com
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 ### Variable Reference
 
 - `NEXT_PUBLIC_API_BASE_URL`
-  Base URL for the backend API. If omitted, the app falls back to `https://scuib-chat-rrx6.onrender.com`.
+  Base URL for the backend API. If omitted, the app falls back to `https://scuib-chat-04do.onrender.com`.
 - `NEXT_PUBLIC_APP_URL`
   Public URL of the frontend. Used for metadata, canonical URLs, and callback/base URL helpers.
 
@@ -191,7 +190,3 @@ Before deploying:
 - This project is on Next.js 16, so check the bundled framework docs in `node_modules/next/dist/docs/` before making framework-level changes.
 - Prefer `rg` for codebase searches and keep client-side auth and onboarding logic consistent with the Zustand stores.
 - Avoid introducing route behavior that shows onboarding or welcome screens on passive session restoration unless that behavior is intentional.
-=======
-# Scuib-chat-frontend
-World first status platform. Let the world feel you daily
->>>>>>> c5d388ed7a0ad9de5772428552c834edfd0afd8e
