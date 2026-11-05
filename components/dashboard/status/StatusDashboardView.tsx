@@ -479,7 +479,15 @@ export function StatusDashboardView({
                 onClick={goToPreviousStatus}
                 onPointerDown={() => setIsPaused(true)}
                 onPointerUp={() => setIsPaused(false)}
+                onPointerLeave={() => setIsPaused(false)}
                 className="absolute bottom-0 left-0 top-0 z-10 w-1/3 cursor-pointer"
+              />
+              {/* Center hold-to-pause zone */}
+              <div
+                className="absolute bottom-0 left-1/3 right-1/3 top-0 z-10"
+                onPointerDown={() => setIsPaused(true)}
+                onPointerUp={() => setIsPaused(false)}
+                onPointerLeave={() => setIsPaused(false)}
               />
               <button
                 type="button"
@@ -487,6 +495,7 @@ export function StatusDashboardView({
                 onClick={goToNextStatus}
                 onPointerDown={() => setIsPaused(true)}
                 onPointerUp={() => setIsPaused(false)}
+                onPointerLeave={() => setIsPaused(false)}
                 className="absolute bottom-0 right-0 top-0 z-10 w-1/3 cursor-pointer"
               />
 
@@ -816,7 +825,15 @@ export function StatusDashboardView({
               onClick={goToPreviousStatus}
               onPointerDown={() => setIsPaused(true)}
               onPointerUp={() => setIsPaused(false)}
+              onPointerLeave={() => setIsPaused(false)}
               className="absolute bottom-0 left-0 top-0 z-10 w-1/3"
+            />
+            {/* Center hold-to-pause zone */}
+            <div
+              className="absolute bottom-0 left-1/3 right-1/3 top-0 z-10"
+              onPointerDown={() => setIsPaused(true)}
+              onPointerUp={() => setIsPaused(false)}
+              onPointerLeave={() => setIsPaused(false)}
             />
             <button
               type="button"
@@ -824,6 +841,7 @@ export function StatusDashboardView({
               onClick={goToNextStatus}
               onPointerDown={() => setIsPaused(true)}
               onPointerUp={() => setIsPaused(false)}
+              onPointerLeave={() => setIsPaused(false)}
               className="absolute bottom-0 right-0 top-0 z-10 w-1/3"
             />
 

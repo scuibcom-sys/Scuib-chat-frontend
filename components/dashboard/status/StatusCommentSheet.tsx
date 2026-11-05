@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, MessageCircle, Send, Trash2, X } from "lucide-react";
+import { ChevronLeft, MessageCircle, Send, Trash2, X, LogIn } from "lucide-react";
+import Link from "next/link";
 
 import { useAuthStore } from "@/store/authStore";
 import { ApiError, type AuthTokens } from "@/utils/scuibApi";
@@ -291,33 +292,45 @@ export function StatusCommentSheet({
         )}
       </div>
 
-      {/* Sticky input */}
+      {/* Sticky input – authenticated users only; guests see a login prompt */}
       <div className="border-t border-[#e7ebf1] px-4 pb-4 pt-3">
-        {submitError ? (
-          <p className="mb-2 text-xs text-red-500">{submitError}</p>
-        ) : null}
-        <div className="flex items-end gap-2">
-          <textarea
-            ref={inputRef}
-            rows={1}
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={submitting}
-            className="flex-1 resize-none rounded-xl border border-[#e2e7ee] bg-[#f9fafb] px-3 py-2 text-sm text-[#1f2733] placeholder:text-[#b0bac5] focus:border-[#3aa757] focus:outline-none disabled:opacity-60"
-            style={{ maxHeight: "96px" }}
-          />
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!inputText.trim() || submitting}
-            aria-label="Send"
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#3aa757] text-white transition-opacity disabled:opacity-40"
+        {currentUser ? (
+          <>
+            {submitError ? (
+              <p className="mb-2 text-xs text-red-500">{submitError}</p>
+            ) : null}
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={placeholder}
+                disabled={submitting}
+                className="flex-1 resize-none rounded-xl border border-[#e2e7ee] bg-[#f9fafb] px-3 py-2 text-sm text-[#1f2733] placeholder:text-[#b0bac5] focus:border-[#3aa757] focus:outline-none disabled:opacity-60"
+                style={{ maxHeight: "96px" }}
+              />
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!inputText.trim() || submitting}
+                aria-label="Send"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#3aa757] text-white transition-opacity disabled:opacity-40"
+              >
+                <Send size={16} />
+              </button>
+            </div>
+          </>
+        ) : (
+          <Link
+            href="/signin"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#4F3422] py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#3d2718]"
           >
-            <Send size={16} />
-          </button>
-        </div>
+            <LogIn size={15} />
+            Log in to comment
+          </Link>
+        )}
       </div>
     </div>
   );
