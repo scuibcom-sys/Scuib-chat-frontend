@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
+  ChevronUp,
   Eye,
   Folder,
   MessageCircle,
@@ -76,6 +77,43 @@ export function StatusDashboardView({
   const [showComments, setShowComments] = useState(false);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [isMobileCollapsed, setIsMobileCollapsed] = useState(false);
+
+  // Hold-to-pause & quick-tap navigation helpers
+  const isHoldingRef = useRef(false);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleZonePointerDown = useCallback(() => {
+    isHoldingRef.current = false;
+    setIsPaused(true);
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = setTimeout(() => {
+      isHoldingRef.current = true;
+    }, 200);
+  }, []);
+
+  const handleZonePointerUp = useCallback((navigateAction?: () => void) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    const wasHold = isHoldingRef.current;
+    isHoldingRef.current = false;
+    setIsPaused(false);
+
+    if (!wasHold && navigateAction) {
+      navigateAction();
+    }
+  }, []);
+
+  const handleZonePointerLeave = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    isHoldingRef.current = false;
+    setIsPaused(false);
+  }, []);
 
   const handleAuthRefresh = useCallback(
     (refreshedTokens: AuthTokens) => {
@@ -217,6 +255,40 @@ export function StatusDashboardView({
       recordedStatusIdsRef.current.delete(activeStatus.id);
     });
   }, [activeStatus, isOwnActiveStatus, accessToken, tokens, handleAuthRefresh]);
+
+  // Live viewer count for own statuses — refresh every 30 s while owner is viewing
+  const [liveViewCount, setLiveViewCount] = useState<number | null>(null);
+  const [recentViewers, setRecentViewers] = useState<ApiStatusViewerRecord[]>([]);
+  useEffect(() => {
+    if (!isOwnActiveStatus || !activeStatus || !accessToken) {
+      setLiveViewCount(null);
+      setRecentViewers([]);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchCount = () => {
+      fetchStatusViewers(activeStatus.id, tokens, handleAuthRefresh)
+        .then((result) => {
+          if (!cancelled) {
+            setLiveViewCount(result.viewCount ?? result.viewers.length);
+            setRecentViewers(result.viewers.slice(0, 3));
+          }
+        })
+        .catch(() => {/* silent — pill falls back to activeStatus.viewCount */});
+    };
+
+    fetchCount();
+    const timer = setInterval(fetchCount, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [isOwnActiveStatus, activeStatus?.id, accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const displayViewCount = isOwnActiveStatus
+    ? (liveViewCount ?? activeStatus?.viewCount ?? 0)
+    : (activeStatus?.viewCount ?? 0);
 
   // Navigation between statuses and authors
   const goToNextStatus = useCallback(() => {
@@ -472,31 +544,27 @@ export function StatusDashboardView({
                 </div>
               </div>
 
-              {/* Tap zones for Next / Previous */}
-              <button
-                type="button"
+              {/* Tap zones for Next / Previous: tap = navigate, hold = pause */}
+              <div
                 aria-label="Previous story"
-                onClick={goToPreviousStatus}
-                onPointerDown={() => setIsPaused(true)}
-                onPointerUp={() => setIsPaused(false)}
-                onPointerLeave={() => setIsPaused(false)}
-                className="absolute bottom-0 left-0 top-0 z-10 w-1/3 cursor-pointer"
+                onPointerDown={handleZonePointerDown}
+                onPointerUp={() => handleZonePointerUp(goToPreviousStatus)}
+                onPointerLeave={handleZonePointerLeave}
+                className="absolute bottom-0 left-0 top-0 z-10 w-1/3 cursor-pointer touch-none"
               />
               {/* Center hold-to-pause zone */}
               <div
-                className="absolute bottom-0 left-1/3 right-1/3 top-0 z-10"
-                onPointerDown={() => setIsPaused(true)}
-                onPointerUp={() => setIsPaused(false)}
-                onPointerLeave={() => setIsPaused(false)}
+                className="absolute bottom-0 left-1/3 right-1/3 top-0 z-10 cursor-pointer touch-none"
+                onPointerDown={handleZonePointerDown}
+                onPointerUp={() => handleZonePointerUp()}
+                onPointerLeave={handleZonePointerLeave}
               />
-              <button
-                type="button"
+              <div
                 aria-label="Next story"
-                onClick={goToNextStatus}
-                onPointerDown={() => setIsPaused(true)}
-                onPointerUp={() => setIsPaused(false)}
-                onPointerLeave={() => setIsPaused(false)}
-                className="absolute bottom-0 right-0 top-0 z-10 w-1/3 cursor-pointer"
+                onPointerDown={handleZonePointerDown}
+                onPointerUp={() => handleZonePointerUp(goToNextStatus)}
+                onPointerLeave={handleZonePointerLeave}
+                className="absolute bottom-0 right-0 top-0 z-10 w-1/3 cursor-pointer touch-none"
               />
 
               {/* Status Media Content */}
@@ -518,10 +586,25 @@ export function StatusDashboardView({
                       setShowComments(false);
                       setShowViewers(true);
                     }}
-                    className="flex items-center gap-1.5 rounded-full bg-black/50 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md transition-colors hover:bg-black/70"
+                    className="flex items-center gap-2 rounded-2xl bg-black/60 px-3.5 py-2 text-white backdrop-blur-md transition-colors hover:bg-black/80 active:scale-95"
                   >
-                    <Eye size={15} />
-                    <span>{activeStatus.viewCount} views</span>
+                    <Eye size={16} className="shrink-0" />
+                    <div className="flex flex-col items-start leading-tight">
+                      <span className="text-sm font-bold">{displayViewCount.toLocaleString()}</span>
+                      <span className="text-[9px] font-medium opacity-75">Tap to see who viewed</span>
+                    </div>
+                    {recentViewers.length > 0 && (
+                      <div className="flex -space-x-1.5 ml-0.5">
+                        {recentViewers.slice(0, 3).map((v) => (
+                          <span
+                            key={v.userId}
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/40 bg-white/20 text-[8px] font-bold text-white"
+                          >
+                            {(v.name ?? "?").trim().charAt(0).toUpperCase()}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </button>
                 ) : (
                   <div className="flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white/90 backdrop-blur-md">
@@ -608,166 +691,191 @@ export function StatusDashboardView({
   // Mobile View (Matches Figma Mobile node-id=375-4879)
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-black">
-      {/* Top Header Bar */}
-      <div className="z-30 flex shrink-0 items-center justify-between bg-white px-5 pb-3 pt-3 shadow-sm">
-        {/* Left Icons: Folder & Chat */}
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={handleOpenComposer}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#4A3D36] transition-colors hover:bg-[#F5EFEA]"
-            title="Upload Media"
-          >
-            <Folder size={22} strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={onSwitchToMessages}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#4A3D36] transition-colors hover:bg-[#F5EFEA]"
-            title="Messages"
-          >
-            <MessageSquare size={22} strokeWidth={2} />
-          </button>
-        </div>
-
-        {/* Right Element: 'Status ⌵' Title */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowStatusDropdown((prev) => !prev)}
-            className="flex items-center gap-1 text-[20px] font-bold text-[#3aa757] active:opacity-80"
-          >
-            <span>Status</span>
-            <ChevronDown size={20} strokeWidth={2.5} />
-          </button>
-
-          {showStatusDropdown ? (
-            <div className="absolute right-0 top-full mt-2 w-48 overflow-hidden rounded-2xl border border-[#EAE3DE] bg-white py-2 shadow-xl">
+      {/* Top Header & Status Strip (collapsible) */}
+      {!isMobileCollapsed && (
+        <>
+          {/* Top Header Bar */}
+          <div className="z-30 flex shrink-0 items-center justify-between bg-white px-5 pb-3 pt-3 shadow-sm">
+            {/* Left Icons: Folder & Chat */}
+            <div className="flex items-center gap-4">
               <button
                 type="button"
-                onClick={() => {
-                  setShowStatusDropdown(false);
-                  handleOpenComposer();
-                }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium text-[#3B2C24] hover:bg-[#F8F5F2]"
+                onClick={handleOpenComposer}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-[#4A3D36] transition-colors hover:bg-[#F5EFEA]"
+                title="Upload Media"
               >
-                <Plus size={16} />
-                <span>Add new status</span>
+                <Folder size={22} strokeWidth={2} />
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowStatusDropdown(false);
-                  loadFeed();
-                }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium text-[#3B2C24] hover:bg-[#F8F5F2]"
+                onClick={onSwitchToMessages}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-[#4A3D36] transition-colors hover:bg-[#F5EFEA]"
+                title="Messages"
               >
-                <RotateCw size={16} />
-                <span>Refresh updates</span>
+                <MessageSquare size={22} strokeWidth={2} />
               </button>
             </div>
-          ) : null}
-        </div>
-      </div>
 
-      {/* Horizontal Status Strip Carousel (Matches Figma Mobile) */}
-      <div className="z-30 shrink-0 border-b border-[#F0EAE4] bg-white px-4 py-3">
-        <div className="flex gap-4 overflow-x-auto scrollbar-none">
-          {/* My Status */}
-          <button
-            type="button"
-            onClick={() => {
-              if (myGroup && myGroup.statuses.length > 0) {
-                handleSelectAuthor(myGroup.authorId);
-              } else {
-                handleOpenComposer();
-              }
-            }}
-            className="flex w-16 shrink-0 flex-col items-center gap-1.5 text-center"
-          >
-            <div className="relative flex h-16 w-16 items-center justify-center rounded-full border-2 border-solid border-[#3aa757]">
-              <div className="relative h-[56px] w-[56px] overflow-hidden rounded-full bg-[#f3f5f8]">
-                {currentUser?.avatarUrl ? (
-                  <Image
-                    src={currentUser.avatarUrl}
-                    alt="My Status"
-                    fill
-                    sizes="56px"
-                    className="object-cover"
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-sm font-semibold text-[#5C3A26]">
-                    {currentUser?.username?.charAt(0).toUpperCase() || "Me"}
-                  </span>
-                )}
-              </div>
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleOpenComposer();
-                }}
-                className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#3aa757] text-[11px] font-bold text-white shadow"
+            {/* Right Element: 'Status ⌵' Title with dropdown and quick collapse */}
+            <div className="relative flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setIsMobileCollapsed(true)}
+                className="flex items-center gap-1 text-[20px] font-bold text-[#3aa757] active:opacity-80"
+                title="Collapse other statuses"
               >
-                +
-              </div>
-            </div>
-            <span className="w-full truncate text-xs text-[#2C2420]">My Status</span>
-          </button>
+                <span>Status</span>
+                <ChevronDown size={20} strokeWidth={2.5} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowStatusDropdown((prev) => !prev)}
+                className="p-1 text-[#4A3D36]/60 hover:text-[#4F3422] transition-colors"
+                title="Status Options"
+              >
+                <ChevronDown size={16} />
+              </button>
 
-          {/* Contacts */}
-          {isLoading
-            ? Array.from({ length: 4 }).map((_, idx) => (
-                <div key={idx} className="flex w-16 shrink-0 flex-col items-center gap-1.5">
-                  <div className="h-16 w-16 animate-pulse rounded-full bg-[#EFE9E4]" />
-                  <div className="h-2.5 w-12 animate-pulse rounded bg-[#EFE9E4]" />
-                </div>
-              ))
-            : authorGroups.map((group) => {
-                const isSelected = selectedAuthorId === group.authorId;
-                const ringClass = group.hasUnviewed
-                  ? "border-2 border-solid border-[#3aa757]"
-                  : "border-2 border-dashed border-[#3aa757]";
-
-                return (
+              {showStatusDropdown ? (
+                <div className="absolute right-0 top-full mt-2 w-48 overflow-hidden rounded-2xl border border-[#EAE3DE] bg-white py-2 shadow-xl z-50">
                   <button
-                    key={group.authorId}
                     type="button"
-                    onClick={() => handleSelectAuthor(group.authorId)}
-                    className="flex w-16 shrink-0 flex-col items-center gap-1.5 text-center"
+                    onClick={() => {
+                      setShowStatusDropdown(false);
+                      setIsMobileCollapsed(true);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium text-[#3B2C24] hover:bg-[#F8F5F2]"
                   >
-                    <div
-                      className={`relative flex h-16 w-16 items-center justify-center rounded-full ${ringClass} ${
-                        isSelected ? "ring-2 ring-[#3aa757]" : ""
-                      }`}
-                    >
-                      <div className="relative h-[56px] w-[56px] overflow-hidden rounded-full bg-[#F5EFEA]">
-                        {group.authorAvatarUrl ? (
-                          <Image
-                            src={group.authorAvatarUrl}
-                            alt={group.authorName}
-                            fill
-                            sizes="56px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <span className="flex h-full w-full items-center justify-center text-sm font-bold text-[#6B452E]">
-                            {group.authorName.trim().charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span
-                      className={`w-full truncate text-xs ${
-                        isSelected ? "font-bold text-[#1C1613]" : "text-[#4A3D36]"
-                      }`}
-                    >
-                      {group.authorName}
-                    </span>
+                    <ChevronUp size={16} />
+                    <span>Collapse other statuses</span>
                   </button>
-                );
-              })}
-        </div>
-      </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowStatusDropdown(false);
+                      handleOpenComposer();
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium text-[#3B2C24] hover:bg-[#F8F5F2]"
+                  >
+                    <Plus size={16} />
+                    <span>Add new status</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowStatusDropdown(false);
+                      loadFeed();
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium text-[#3B2C24] hover:bg-[#F8F5F2]"
+                  >
+                    <RotateCw size={16} />
+                    <span>Refresh updates</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Horizontal Status Strip Carousel (Matches Figma Mobile) */}
+          <div className="z-30 shrink-0 border-b border-[#F0EAE4] bg-white px-4 py-3">
+            <div className="flex gap-4 overflow-x-auto scrollbar-none">
+              {/* My Status */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (myGroup && myGroup.statuses.length > 0) {
+                    handleSelectAuthor(myGroup.authorId);
+                  } else {
+                    handleOpenComposer();
+                  }
+                }}
+                className="flex w-16 shrink-0 flex-col items-center gap-1.5 text-center"
+              >
+                <div className="relative flex h-16 w-16 items-center justify-center rounded-full border-2 border-solid border-[#3aa757]">
+                  <div className="relative h-[56px] w-[56px] overflow-hidden rounded-full bg-[#f3f5f8]">
+                    {currentUser?.avatarUrl ? (
+                      <Image
+                        src={currentUser.avatarUrl}
+                        alt="My Status"
+                        fill
+                        sizes="56px"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-sm font-semibold text-[#5C3A26]">
+                        {currentUser?.username?.charAt(0).toUpperCase() || "Me"}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenComposer();
+                    }}
+                    className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#3aa757] text-[11px] font-bold text-white shadow"
+                  >
+                    +
+                  </div>
+                </div>
+                <span className="w-full truncate text-xs text-[#2C2420]">My Status</span>
+              </button>
+
+              {/* Contacts */}
+              {isLoading
+                ? Array.from({ length: 4 }).map((_, idx) => (
+                    <div key={idx} className="flex w-16 shrink-0 flex-col items-center gap-1.5">
+                      <div className="h-16 w-16 animate-pulse rounded-full bg-[#EFE9E4]" />
+                      <div className="h-2.5 w-12 animate-pulse rounded bg-[#EFE9E4]" />
+                    </div>
+                  ))
+                : authorGroups.map((group) => {
+                    const isSelected = selectedAuthorId === group.authorId;
+                    const ringClass = group.hasUnviewed
+                      ? "border-2 border-solid border-[#3aa757]"
+                      : "border-2 border-dashed border-[#3aa757]";
+
+                    return (
+                      <button
+                        key={group.authorId}
+                        type="button"
+                        onClick={() => handleSelectAuthor(group.authorId)}
+                        className="flex w-16 shrink-0 flex-col items-center gap-1.5 text-center"
+                      >
+                        <div
+                          className={`relative flex h-16 w-16 items-center justify-center rounded-full ${ringClass} ${
+                            isSelected ? "ring-2 ring-[#3aa757]" : ""
+                          }`}
+                        >
+                          <div className="relative h-[56px] w-[56px] overflow-hidden rounded-full bg-[#F5EFEA]">
+                            {group.authorAvatarUrl ? (
+                              <Image
+                                src={group.authorAvatarUrl}
+                                alt={group.authorName}
+                                fill
+                                sizes="56px"
+                                className="object-cover"
+                              />
+                            ) : (
+                              <span className="flex h-full w-full items-center justify-center text-sm font-bold text-[#6B452E]">
+                                {group.authorName.trim().charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span
+                          className={`w-full truncate text-xs ${
+                            isSelected ? "font-bold text-[#1C1613]" : "text-[#4A3D36]"
+                          }`}
+                        >
+                          {group.authorName}
+                        </span>
+                      </button>
+                    );
+                  })}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Immersive Active Story Viewer (Matches Figma Mobile) */}
       <div className="relative flex-1 overflow-hidden bg-black">
@@ -818,31 +926,39 @@ export function StatusDashboardView({
               </span>
             </div>
 
-            {/* Tap zones for Next/Prev */}
-            <button
-              type="button"
+            {/* Floating expand/collapse circular button (Matches Figma Mobile collapsed view node-id=375-4879) */}
+            {isMobileCollapsed && (
+              <button
+                type="button"
+                onClick={() => setIsMobileCollapsed(false)}
+                aria-label="Expand all statuses"
+                className="absolute top-4 right-4 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#1C1613] shadow-[0_4px_16px_rgba(0,0,0,0.28)] active:scale-90 transition-transform"
+              >
+                <ChevronUp size={20} strokeWidth={2.5} />
+              </button>
+            )}
+
+            {/* Tap zones for Next/Prev: tap = navigate, hold = pause */}
+            <div
               aria-label="Previous story"
-              onClick={goToPreviousStatus}
-              onPointerDown={() => setIsPaused(true)}
-              onPointerUp={() => setIsPaused(false)}
-              onPointerLeave={() => setIsPaused(false)}
-              className="absolute bottom-0 left-0 top-0 z-10 w-1/3"
+              onPointerDown={handleZonePointerDown}
+              onPointerUp={() => handleZonePointerUp(goToPreviousStatus)}
+              onPointerLeave={handleZonePointerLeave}
+              className="absolute bottom-0 left-0 top-0 z-10 w-1/3 cursor-pointer touch-none"
             />
             {/* Center hold-to-pause zone */}
             <div
-              className="absolute bottom-0 left-1/3 right-1/3 top-0 z-10"
-              onPointerDown={() => setIsPaused(true)}
-              onPointerUp={() => setIsPaused(false)}
-              onPointerLeave={() => setIsPaused(false)}
+              className="absolute bottom-0 left-1/3 right-1/3 top-0 z-10 cursor-pointer touch-none"
+              onPointerDown={handleZonePointerDown}
+              onPointerUp={() => handleZonePointerUp()}
+              onPointerLeave={handleZonePointerLeave}
             />
-            <button
-              type="button"
+            <div
               aria-label="Next story"
-              onClick={goToNextStatus}
-              onPointerDown={() => setIsPaused(true)}
-              onPointerUp={() => setIsPaused(false)}
-              onPointerLeave={() => setIsPaused(false)}
-              className="absolute bottom-0 right-0 top-0 z-10 w-1/3"
+              onPointerDown={handleZonePointerDown}
+              onPointerUp={() => handleZonePointerUp(goToNextStatus)}
+              onPointerLeave={handleZonePointerLeave}
+              className="absolute bottom-0 right-0 top-0 z-10 w-1/3 cursor-pointer touch-none"
             />
 
             {/* Media renderer */}
@@ -863,10 +979,25 @@ export function StatusDashboardView({
                     setShowComments(false);
                     setShowViewers(true);
                   }}
-                  className="flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white backdrop-blur-md"
+                  className="flex items-center gap-2 rounded-2xl bg-black/60 px-3 py-2 text-white backdrop-blur-md active:scale-95 transition-transform"
                 >
-                  <Eye size={14} />
-                  <span>{activeStatus.viewCount}</span>
+                  <Eye size={15} className="shrink-0" />
+                  <div className="flex flex-col items-start leading-tight">
+                    <span className="text-sm font-bold">{displayViewCount.toLocaleString()}</span>
+                    <span className="text-[9px] font-medium opacity-75">Tap to see who</span>
+                  </div>
+                  {recentViewers.length > 0 && (
+                    <div className="flex -space-x-1.5">
+                      {recentViewers.slice(0, 3).map((v) => (
+                        <span
+                          key={v.userId}
+                          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/40 bg-white/20 text-[8px] font-bold text-white"
+                        >
+                          {(v.name ?? "?").trim().charAt(0).toUpperCase()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </button>
               ) : (
                 <div className="flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white backdrop-blur-md">
@@ -1077,6 +1208,7 @@ function StoryViewersSheet({
   onClose: () => void;
 }) {
   const [viewers, setViewers] = useState<ApiStatusViewerRecord[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -1085,7 +1217,10 @@ function StoryViewersSheet({
 
     fetchStatusViewers(statusId, tokens, onAuthRefresh)
       .then((result) => {
-        if (isActive) setViewers(result.viewers);
+        if (isActive) {
+          setViewers(result.viewers);
+          setTotalCount(result.viewCount ?? result.viewers.length);
+        }
       })
       .catch((error) => {
         if (isActive) {
@@ -1102,9 +1237,16 @@ function StoryViewersSheet({
   }, [statusId, tokens, onAuthRefresh]);
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-30 max-h-[60%] overflow-y-auto rounded-t-3xl bg-white px-5 py-4 shadow-2xl">
-      <div className="mb-3 flex items-center justify-between border-b border-[#F0EAE4] pb-2">
-        <span className="text-sm font-bold text-[#1f2733]">Viewed by</span>
+    <div className="absolute inset-x-0 bottom-0 z-30 max-h-[65%] overflow-y-auto rounded-t-3xl bg-white px-5 py-4 shadow-2xl">
+      <div className="mb-3 flex items-center justify-between border-b border-[#F0EAE4] pb-3">
+        <div className="flex flex-col">
+          <span className="text-sm font-bold text-[#1f2733]">Viewed by</span>
+          {!isLoading && !loadError && (
+            <span className="text-xs text-[#7a8595]">
+              {totalCount.toLocaleString()} {totalCount === 1 ? "person" : "people"}
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={onClose}
@@ -1119,7 +1261,10 @@ function StoryViewersSheet({
       ) : loadError ? (
         <p className="py-4 text-center text-sm text-red-600">{loadError}</p>
       ) : viewers.length === 0 ? (
-        <p className="py-4 text-center text-sm text-[#7a8595]">No views yet.</p>
+        <div className="flex flex-col items-center gap-2 py-8">
+          <Eye size={32} className="text-[#C8B9AE]" />
+          <p className="text-sm text-[#7a8595]">No views yet — be the first to share!</p>
+        </div>
       ) : (
         <ul className="flex flex-col gap-3">
           {viewers.map((viewer) => (
@@ -1139,7 +1284,14 @@ function StoryViewersSheet({
                   </span>
                 )}
               </span>
-              <span className="text-sm font-medium text-[#1f2733]">{viewer.name ?? "Unknown"}</span>
+              <div className="flex flex-col leading-tight">
+                <span className="text-sm font-medium text-[#1f2733]">{viewer.name ?? "Unknown"}</span>
+                {viewer.viewedAt && (
+                  <span className="text-[10px] text-[#9EA9B4]">
+                    {formatRelativeTime(viewer.viewedAt)}
+                  </span>
+                )}
+              </div>
             </li>
           ))}
         </ul>

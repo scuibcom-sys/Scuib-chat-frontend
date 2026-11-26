@@ -205,6 +205,8 @@ function StatusViewer({
   onPrev,
   hasPrev,
   hasNext,
+  isCollapsed,
+  onToggleCollapse,
 }: {
   status: MockStatus;
   statusIndex: number;
@@ -212,6 +214,8 @@ function StatusViewer({
   onPrev: () => void;
   hasPrev: boolean;
   hasNext: boolean;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }) {
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -219,6 +223,10 @@ function StatusViewer({
   const pausedAtRef = useRef<number>(0);
   const elapsedRef = useRef<number>(0);
   const DURATION = 6000;
+
+  // Hold-to-pause tracking
+  const isHoldingRef = useRef(false);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startProgress = useCallback(() => {
     setProgress(0);
@@ -242,6 +250,7 @@ function StatusViewer({
     startProgress();
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status.id]);
@@ -260,8 +269,44 @@ function StatusViewer({
     setIsPaused(false);
   }, []);
 
+  // Pointer down/up for tap zones (hold >= 200ms = pause only, tap < 200ms = navigate)
+  const handleZonePointerDown = useCallback(() => {
+    isHoldingRef.current = false;
+    handlePauseStart();
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = setTimeout(() => {
+      isHoldingRef.current = true;
+    }, 200);
+  }, [handlePauseStart]);
+
+  const handleZonePointerUp = useCallback(
+    (navigateAction?: () => void) => {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      const wasHold = isHoldingRef.current;
+      isHoldingRef.current = false;
+      handlePauseEnd();
+
+      if (!wasHold && navigateAction) {
+        navigateAction();
+      }
+    },
+    [handlePauseEnd],
+  );
+
+  const handleZonePointerLeave = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    isHoldingRef.current = false;
+    handlePauseEnd();
+  }, [handlePauseEnd]);
+
   return (
-    <div className="relative w-full h-full overflow-hidden bg-black">
+    <div className="relative w-full h-full overflow-hidden bg-black select-none">
       {/* Background image */}
       <AnimatePresence mode="wait">
         <motion.img
@@ -287,9 +332,9 @@ function StatusViewer({
       />
 
       {/* Top header */}
-      <div className="absolute top-6 left-0 right-0 flex items-center gap-3 px-4 z-10">
+      <div className="absolute top-6 left-0 right-0 flex items-center gap-3 px-4 z-10 pointer-events-none">
         <div
-          className="h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 border-2 border-white/60"
+          className="h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 border-2 border-white/60 pointer-events-auto"
           style={{ backgroundColor: status.avatarColor }}
         >
           {status.avatarInitials}
@@ -302,33 +347,51 @@ function StatusViewer({
         </div>
       </div>
 
-      {/* Hold-to-pause overlay (covers the full area, behind tap zones) */}
+      {/* Floating expand/collapse circular button (Matches Figma mobile collapsed view node-id=375-4879) */}
+      {isCollapsed && (
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-label="Expand all statuses"
+          className="md:hidden absolute top-4 right-4 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#1C1613] shadow-[0_4px_16px_rgba(0,0,0,0.28)] active:scale-90 transition-transform"
+        >
+          <ChevronUp className="h-5 w-5 stroke-[2.5]" />
+        </button>
+      )}
+
+      {/* Left tap zone: quick tap = prev, hold = pause */}
       <div
-        className="absolute inset-0 z-[5]"
-        onPointerDown={handlePauseStart}
-        onPointerUp={handlePauseEnd}
-        onPointerLeave={handlePauseEnd}
+        className="absolute left-0 top-0 w-1/3 h-full z-10 cursor-pointer touch-none"
+        onPointerDown={handleZonePointerDown}
+        onPointerUp={() => handleZonePointerUp(hasPrev ? onPrev : undefined)}
+        onPointerLeave={handleZonePointerLeave}
+        onContextMenu={(e) => e.preventDefault()}
       />
 
-      {/* Invisible tap zones */}
-      <button
-        className="absolute left-0 top-0 w-1/3 h-full z-10 cursor-default"
-        onClick={onPrev}
-        disabled={!hasPrev}
-        aria-label="Previous story"
-      />
-      <button
-        className="absolute right-0 top-0 w-1/3 h-full z-10 cursor-default"
-        onClick={onNext}
-        aria-label="Next story"
+      {/* Center zone: hold to pause */}
+      <div
+        className="absolute left-1/3 right-1/3 top-0 h-full z-10 cursor-pointer touch-none"
+        onPointerDown={handleZonePointerDown}
+        onPointerUp={() => handleZonePointerUp()}
+        onPointerLeave={handleZonePointerLeave}
+        onContextMenu={(e) => e.preventDefault()}
       />
 
-      {/* Pause indicator */}
+      {/* Right tap zone: quick tap = next, hold = pause */}
+      <div
+        className="absolute right-0 top-0 w-1/3 h-full z-10 cursor-pointer touch-none"
+        onPointerDown={handleZonePointerDown}
+        onPointerUp={() => handleZonePointerUp(hasNext ? onNext : undefined)}
+        onPointerLeave={handleZonePointerLeave}
+        onContextMenu={(e) => e.preventDefault()}
+      />
+
+      {/* Pause indicator pill */}
       {isPaused && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-          <div className="flex gap-1.5">
-            <div className="w-1 h-7 rounded-full bg-white/80" />
-            <div className="w-1 h-7 rounded-full bg-white/80" />
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <div className="flex gap-1.5 rounded-full bg-black/40 px-3.5 py-2 backdrop-blur-sm">
+            <div className="w-1.5 h-6 rounded-full bg-white/90" />
+            <div className="w-1.5 h-6 rounded-full bg-white/90" />
           </div>
         </div>
       )}
@@ -352,7 +415,7 @@ function StatusViewer({
       )}
 
       {/* Bottom overlay – caption + view count (above the CTA) */}
-      <div className="absolute bottom-[7.5rem] md:bottom-6 left-0 right-0 px-4 z-10">
+      <div className="absolute bottom-[7.5rem] md:bottom-6 left-0 right-0 px-4 z-20">
         <p className="text-white text-base font-semibold drop-shadow mb-2">
           {status.caption}
         </p>
@@ -493,7 +556,11 @@ function DesktopStatusList({
 
 // ─── Mobile top header ─────────────────────────────────────────────────────────
 
-function MobileHeader() {
+function MobileHeader({
+  onToggleCollapse,
+}: {
+  onToggleCollapse: () => void;
+}) {
   return (
     <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-[#FAF6F1] border-b border-[#4F3422]/10 flex-shrink-0">
       <Link href="/signin" className="text-[#4F3422]/60 hover:text-[#4F3422] transition-colors">
@@ -503,11 +570,22 @@ function MobileHeader() {
         <MessageCircle className="h-6 w-6" />
       </Link>
       <div className="flex-1 flex justify-center">
-        <span className="text-[#ED7E1C] text-[15px] font-extrabold">Status</span>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="flex items-center gap-1 text-[#ED7E1C] text-[15px] font-extrabold active:opacity-80"
+        >
+          <span>Status</span>
+        </button>
       </div>
-      <Link href="/signin" className="text-[#4F3422]/60 hover:text-[#4F3422] transition-colors">
+      <button
+        type="button"
+        onClick={onToggleCollapse}
+        aria-label="Collapse other statuses"
+        className="p-1 text-[#4F3422]/60 hover:text-[#4F3422] transition-colors active:scale-90"
+      >
         <ChevronDown className="h-5 w-5" />
-      </Link>
+      </button>
     </div>
   );
 }
@@ -518,67 +596,35 @@ function MobileStoryStrip({
   statuses,
   activeId,
   onSelect,
-  collapsed,
-  onToggleCollapse,
 }: {
   statuses: MockStatus[];
   activeId: string;
   onSelect: (id: string) => void;
-  collapsed: boolean;
-  onToggleCollapse: () => void;
 }) {
   return (
-    <div className="md:hidden bg-[#FAF6F1] flex-shrink-0 border-b border-[#4F3422]/10">
-      {/* Collapse toggle bar */}
-      <button
-        type="button"
-        onClick={onToggleCollapse}
-        className="w-full flex items-center justify-center py-1 text-[#4F3422]/40 hover:text-[#4F3422]/70 transition-colors"
-        aria-label={collapsed ? "Expand story strip" : "Collapse story strip"}
-      >
-        {collapsed ? (
-          <ChevronDown className="h-4 w-4" />
-        ) : (
-          <ChevronUp className="h-4 w-4" />
-        )}
-      </button>
-
-      {/* Avatars row – collapses when toggled */}
-      <AnimatePresence initial={false}>
-        {!collapsed && (
-          <motion.div
-            key="strip"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            className="overflow-hidden"
-          >
-            <div className="flex gap-4 overflow-x-auto px-3 pb-3">
-              {/* My status – sign in to add */}
-              <Link href="/signin" className="flex flex-col items-center gap-1.5 flex-shrink-0">
-                <div className="relative h-14 w-14 rounded-full bg-[#E8DED5] border-2 border-[#4F3422]/15 flex items-center justify-center">
-                  <User className="h-5 w-5 text-[#4F3422]/40" />
-                  <div className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-[#2D6A4F] border-2 border-white flex items-center justify-center">
-                    <span className="text-white text-[10px] font-bold">+</span>
-                  </div>
-                </div>
-                <span className="text-[11px] font-semibold text-[#4F3422]">My Status</span>
-              </Link>
-
-              {statuses.map((s) => (
-                <StoryAvatar
-                  key={s.id}
-                  status={s}
-                  isActive={s.id === activeId}
-                  onClick={() => onSelect(s.id)}
-                  size="sm"
-                />
-              ))}
+    <div className="md:hidden bg-[#FAF6F1] flex-shrink-0 border-b border-[#4F3422]/10 px-3 py-3">
+      <div className="flex gap-4 overflow-x-auto scrollbar-none">
+        {/* My status – sign in to add */}
+        <Link href="/signin" className="flex flex-col items-center gap-1.5 flex-shrink-0">
+          <div className="relative h-14 w-14 rounded-full bg-[#E8DED5] border-2 border-[#4F3422]/15 flex items-center justify-center">
+            <User className="h-5 w-5 text-[#4F3422]/40" />
+            <div className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-[#2D6A4F] border-2 border-white flex items-center justify-center">
+              <span className="text-white text-[10px] font-bold">+</span>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+          <span className="text-[11px] font-semibold text-[#4F3422]">My Status</span>
+        </Link>
+
+        {statuses.map((s) => (
+          <StoryAvatar
+            key={s.id}
+            status={s}
+            isActive={s.id === activeId}
+            onClick={() => onSelect(s.id)}
+            size="sm"
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -700,17 +746,26 @@ export function StatusLandingPage() {
 
         {/* Main content column */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          {/* Mobile header */}
-          <MobileHeader />
-
-          {/* Mobile story strip (collapsible) */}
-          <MobileStoryStrip
-            statuses={MOCK_STATUSES}
-            activeId={activeStatus.id}
-            onSelect={handleSelect}
-            collapsed={stripCollapsed}
-            onToggleCollapse={() => setStripCollapsed((v) => !v)}
-          />
+          {/* Mobile header & story strip (collapsible) */}
+          <AnimatePresence initial={false}>
+            {!stripCollapsed && (
+              <motion.div
+                key="mobile-top-area"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
+                className="overflow-hidden md:hidden flex-shrink-0"
+              >
+                <MobileHeader onToggleCollapse={() => setStripCollapsed(true)} />
+                <MobileStoryStrip
+                  statuses={MOCK_STATUSES}
+                  activeId={activeStatus.id}
+                  onSelect={handleSelect}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Viewer */}
           <div className="relative flex-1 min-h-0">
@@ -721,6 +776,8 @@ export function StatusLandingPage() {
               onPrev={handlePrev}
               hasPrev={activeIndex > 0}
               hasNext={activeIndex < MOCK_STATUSES.length - 1}
+              isCollapsed={stripCollapsed}
+              onToggleCollapse={() => setStripCollapsed((v) => !v)}
             />
 
             {/* Mobile CTA */}
